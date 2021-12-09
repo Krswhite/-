@@ -1,0 +1,538 @@
+/*
+
+created by qww, Krswhite
+		v1.0
+
+*/
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+struct tree {
+	int parent, left, right;
+	int judge;
+	char bits[256];
+	unsigned char info;
+	int weight;
+};
+typedef struct tree tree;
+
+struct frequent {
+	int weight;
+	unsigned char info;
+};
+typedef struct frequent frequent;
+
+struct Sheet {
+	unsigned char info;
+	char bits[256];
+};
+typedef struct Sheet Sheet;
+
+char *getFrelist(frequent *frelist);
+
+long long int enLine(frequent *frelist);
+
+frequent *initialFrequent();
+
+Sheet *initialSheet(tree *HuffmanTree);
+
+tree *creaTree(frequent *frelist);
+
+tree *initialTree(frequent *frelist, int n);
+
+int enCheck(frequent *frelist);
+
+int findMintree(tree *HuffmanTree, int n);
+
+char *Insertfre(frequent *frelist);
+
+void getBits(tree *HuffmanTree, tree *node, char *head, char *spot);
+
+void compressMain(char *preName, char *nextName, Sheet *coding, long long int size);
+
+void decmopressMain(tree *HuffmanTree, long long int size, char *preName, FILE *fp);
+
+int writeIn(unsigned char *Buffer, char *nextName);
+
+void fileInfo(long long int size);
+
+void Insertfileinfo(long long int size, char *nextName, char *preName);
+
+void Compress();
+
+void Decompression();
+
+FILE *getfileinfo(char *preName, frequent *frelist);
+
+int putSource(tree *HuffmanTree, unsigned char *Buffer, char *Name, long long int *now, long long int *size);
+
+int main() {
+	Compress();
+	Decompression();
+//	for (int i = 0; i < 256; i++) {
+//		printf("%c = %s\n", coding[i].info, coding[i].bits);
+//	}
+	return 0;
+}
+
+tree *initialTree(frequent *frelist, int n) {
+	tree *HuffmanTree = (tree *)malloc((2 * n - 1) * sizeof(tree));
+	if (HuffmanTree != NULL) {
+		printf("正在初始化哈夫曼树......\n");
+		for (int i = 0; i < 2 * n - 1; i++) {
+			if (i < n) {
+				HuffmanTree[n - i - 1].info = frelist[i].info;
+				HuffmanTree[n - i - 1].weight = frelist[i].weight;
+			} else {
+				HuffmanTree[i].info = '\0';
+				HuffmanTree[i].weight = 0;
+			}
+			HuffmanTree[i].judge = 0;
+			HuffmanTree[i].parent = -1;
+			HuffmanTree[i].left = -1;
+			HuffmanTree[i].right = -1;
+			for (int j = 0; j < 256; j++) {
+				HuffmanTree[i].bits[j] = '\0';
+			}
+		}
+	} else {
+		printf("Error！\n");
+	}
+	return HuffmanTree;
+}
+
+frequent *initialFrequent() {
+	frequent *frelist = (frequent *)malloc(256 * sizeof(frequent));
+	if (frelist != NULL) {
+		for (int i = 0; i < 256; i++) {
+			frelist[i].weight = 0;
+			frelist[i].info = i;
+		}
+	} else {
+		printf("Error\n");
+	}
+	return frelist;
+}
+
+// 需要修改，
+char *getFrelist(frequent *frelist) {
+// 记录字节数
+	long long int size = 0;
+	char *preName = (char *)malloc(sizeof(char) * 30);
+	printf("请输入待压缩的文件名：\n");
+	scanf("%s", preName);
+	FILE *fp;
+	fp = fopen(preName, "rb");
+	if (fp) {
+		printf("正在统计各个字符频度......\n");
+		unsigned char data;
+		int judge;
+		while (1) {
+			judge = fread(&data, 1, 1, fp);
+			if (judge == 1) {
+				frelist[data].weight++;
+				size++;
+			} else {
+				break;
+			}
+//			printf("data = %d", data);
+//			printf("size = %lld\n", size);
+		}
+// 补丁?
+//		frelist[data].weight--;
+//		size--;
+		fileInfo(size);
+	} else {
+		printf("Error！\n");
+	}
+	fclose(fp);
+	if (enCheck(frelist)) {
+		printf("统计完成。\n");
+	} else {
+		printf("统计失败,存在字符数量溢出上限。\n");
+	}
+	return preName;
+}
+
+long long int enLine(frequent *frelist) {
+	long long int size = 0;
+	for (int i = 0; i < 256; i++) {
+		for (int j = i; j < 256; j++) {
+			if (frelist[j].weight > frelist[i].weight) {
+				frequent temp = frelist[i];
+				frelist[i] = frelist[j];
+				frelist[j] = temp;
+			}
+		}
+		size += frelist[i].weight;
+	}
+	return size;
+}
+
+// 记得 free frelist
+// 记得 free HuffmanTree
+
+tree *creaTree(frequent *frelist) {
+	printf("正在组构哈夫曼树......\n");
+	int n = 0;
+	for (n; frelist[n].weight != 0; n++);
+	tree *HuffmanTree = initialTree(frelist, n);
+	for (int i = n; i < 2 * n - 1; i++) {
+		int left = findMintree(HuffmanTree, i);
+		int right = findMintree(HuffmanTree, i);
+		HuffmanTree[i].left = left;
+		HuffmanTree[i].right = right;
+		HuffmanTree[i].weight = HuffmanTree[left].weight + HuffmanTree[right].weight;
+	}
+	printf("正在获取压缩后对应字符串......\n");
+	char a[256] = {'\0'};
+	getBits(HuffmanTree, &HuffmanTree[2 * n - 2], a, a);
+//	测试
+//	for (int i = 0; i < 2 * n - 1; i++) {
+//		printf("i = %d %d = %s left = %d right = %d parent = %d\n", i, HuffmanTree[i].info, HuffmanTree[i].bits,
+//		       HuffmanTree[i].left,
+//		       HuffmanTree[i].right, HuffmanTree[i].parent);
+//	}
+	printf("哈夫曼树创建完成。\n");
+// 搭建完成
+	return HuffmanTree;
+}
+
+int enCheck(frequent *frelist) {
+// 做频度检查
+	for (int i = 0; i < 256; i++) {
+		if (frelist[i].weight < 0) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+int findMintree(tree *HuffmanTree, int n) {
+	int min = 0x7fffffff;
+	int son;
+	for (int i = 0; i < n; i++) {
+		if (HuffmanTree[i].judge == 0 && HuffmanTree[i].weight < min) {
+			min = HuffmanTree[i].weight;
+			son = i;
+		}
+	}
+	HuffmanTree[son].judge = 1;
+	HuffmanTree[son].parent = n;
+	return son;
+}
+
+void getBits(tree *HuffmanTree, tree *node, char *head, char *spot) {
+// 判断一个即可
+	if (node->left == -1) {
+		strcpy(node->bits, head);
+//		printf("head = %s\n", head);
+	} else {
+		*spot = '1';
+		spot++;
+		getBits(HuffmanTree, &HuffmanTree[node->left], head, spot);
+		spot--;
+		*spot = '0';
+		spot++;
+		getBits(HuffmanTree, &HuffmanTree[node->right], head, spot);
+		spot--;
+		*spot = '\0';
+
+	}
+}
+
+Sheet *initialSheet(tree *HuffmanTree) {
+// 初始化
+	printf("正在建立编码表......\n");
+	Sheet *coding = (Sheet *)malloc(sizeof(Sheet) * 256);
+	if (coding != NULL) {
+		for (int i = 0; i < 256; i++) {
+			coding[i].info = 0;
+			for (int j = 0; j < 256; j++) {
+				coding[i].bits[j] = '\0';
+			}
+		}
+		for (int i = 0; HuffmanTree[i].left == -1; i++) {
+			unsigned char info = HuffmanTree[i].info;
+			coding[info].info = info;
+			strcpy(coding[info].bits, HuffmanTree[i].bits);
+		}
+	} else {
+		printf("Error!\n");
+	}
+	return coding;
+}
+// 将frelist存入压缩文件是个好方法
+
+char *Insertfre(frequent *frelist) {
+	char *Name = (char *)malloc(sizeof(char) * 30);
+	printf("请输入压缩文件名:");
+	scanf("%s", Name);
+	FILE *fp;
+	fp = fopen(Name, "wb");
+	if (fp) {
+		for (int i = 0; i < 256; i++) {
+			putw(frelist[i].weight, fp);
+		}
+		printf("已创建压缩文件并将频数表写入。\n");
+	} else {
+		printf("Error!\n");
+	}
+	fclose(fp);
+	return Name;
+//	int getw(FILE *fp);
+}
+
+// 需要修改 需要两个name size coding (已改
+void compressMain(char *preName, char *nextName, Sheet *coding, long long int size) {
+// buffer暂存译码
+	printf("正在压缩......\n");
+	unsigned char Buffer[2048 * 256 + 1] = {'\0'};
+	FILE *fp;
+	fp = fopen(preName, "rb");
+// 需要优化,重构 代码太丑,虽然功能实现了 (已完成   +
+	int j = 0;
+	long long int now = 0;
+	if (fp) {
+		char unsigned data;
+		while (!feof(fp)) {
+			if (2048 * 256 - j > 256 && now != size) {
+				now += fread(&data, 1, 1, fp);
+//				printf("%d\t", data);
+				strcpy(&Buffer[j], coding[data].bits);
+				j += strlen(coding[data].bits);
+//				printf("data = %d len = %d\t", data, strlen(coding[data].bits));
+			} else {
+				j = writeIn(Buffer, nextName);
+				if (now == size) {
+					if (j != 0) {
+						for (j; j < 8; j++) {
+							Buffer[j] = '0';
+						}
+						writeIn(Buffer, nextName);
+					}
+					printf("压缩完成。\n");
+					break;
+				}
+			}
+		}
+//		printf("now = %lld\n", now);
+	} else {
+		printf("Error！\n");
+	}
+	fclose(fp);
+}
+
+int writeIn(unsigned char *Buffer, char *nextName) {
+	int ret = 0;
+	FILE *fp;
+	fp = fopen(nextName, "ab");
+	if (fp) {
+		unsigned char a[9] = {'\0'};
+		int i;
+		for (i = 0; Buffer[i] != '\0'; i++) {
+			a[i % 8] = Buffer[i];
+			if ((i + 1) % 8 == 0) {
+				unsigned char value = 0;
+				int mult = 1;
+// 翻译成整数并写入
+				for (int j = 7; j >= 0; j--) {
+					value += mult * (a[j] - '0');
+					mult *= 2;
+					a[j] = '\0';
+				}
+//				printf("%d\t", value);
+				fwrite(&value, 1, 1, fp);
+			}
+		}
+		int j;
+		for (j = 0; a[j] != '\0'; j++) {
+			Buffer[j] = a[j];
+		}
+		ret = j;
+		for (j; j < i; j++) {
+			Buffer[j] = '\0';
+		}
+	} else {
+		printf("Error!\n");
+	}
+	fclose(fp);
+	return ret;
+}
+
+void fileInfo(long long int size) {
+	printf("该文件的大小为: ");
+	if (size >= 1024 * 1024 * 1024) {
+		printf("%.1f GB\n", (double)size / (1024 * 1024 * 1024));
+	} else if (size >= 1024 * 1024) {
+		printf("%.1f MB\n", (double)size / (1024 * 1024));
+	} else if (size >= 1024) {
+		printf("%.1f KB\n", (double)size / 1024);
+	} else {
+		printf("%lld Byte\n", size);
+	}
+}
+
+void Insertfileinfo(long long int size, char *nextName, char *preName) {
+	printf("写入文件信息......\n");
+	FILE *fp;
+	fp = fopen(nextName, "ab");
+	if (fp) {
+		fwrite(preName, 30, 1, fp);
+//		fwrite(&size, 8, 1, fp);
+		char *auther = "created by qww";
+		fwrite(auther, 15, 1, fp);
+	} else {
+		printf("Error!\n");
+	}
+	fclose(fp);
+}
+
+void Compress() {
+	frequent *frelist = initialFrequent();
+	char *preName = getFrelist(frelist);
+	char *nextName = Insertfre(frelist);
+	long long int size = enLine(frelist);
+	Insertfileinfo(size, nextName, preName);
+	tree *HuffmanTree = creaTree(frelist);
+	Sheet *coding = initialSheet(HuffmanTree);
+	compressMain(preName, nextName, coding, size);
+	free(HuffmanTree);
+	free(coding);
+	free(frelist);
+}
+
+FILE *getfileinfo(char *preName, frequent *frelist) {
+	char nextName[30] = {'\0'};
+	long long int size;
+	printf("请输入待解压文件名:\n");
+	scanf("%s", nextName);
+	FILE *fp;
+	fp = fopen(nextName, "rb");
+	if (fp) {
+		for (int i = 0; i < 256; i++) {
+			frelist[i].weight = getw(fp);
+//			printf("frelist[%d].weight = %d\n", i, frelist[i].weight);
+		}
+		fread(preName, 30, 1, fp);
+		char a[15];
+		fread(a, 15, 1, fp);
+		printf("\n%s\n\n", a);
+//		fread(&size, 8, 1, fp);
+	} else {
+		printf("Error!\n");
+	}
+	printf("已获取文件名、频度表。\n");
+	return fp;
+}
+
+void Decompression() {
+	char preName[30] = {'\0'};
+	frequent *frelist = initialFrequent();
+	FILE *fp = getfileinfo(preName, frelist);
+	long long int size = enLine(frelist);
+	tree *HuffmanTree = creaTree(frelist);
+	decmopressMain(HuffmanTree, size, preName, fp);
+	free(HuffmanTree);
+	free(frelist);
+}
+
+// 记得 free huffmantree
+void decmopressMain(tree *HuffmanTree, long long int size, char *preName, FILE *fp) {
+	char Name[30] = {'\0'};
+	printf("请输入解压后文件名，请注意该文件压缩前文件名为：%s\n", preName);
+	scanf("%s", Name);
+	if (fp) {
+// 	j为缓冲区目前地址 Buffer为队列
+		int j = 0;
+		long long int now = 0;
+		unsigned char Buffer[2048 * 256 + 1] = {'\0'};
+		unsigned char data;
+		while (1) {
+			if (2048 * 256 - j >= 8 && fread(&data, 1, 1, fp)) {
+				unsigned char a[9] = {'\0'};
+				for (int i = 7; i >= 0; i--) {
+					a[i] = data % 2 + '0';
+					data /= 2;
+				}
+				strcpy(&Buffer[j], a);
+				j += 8;
+			} else {
+//				printf("%s\n", Buffer);
+//				break;
+				j = putSource(HuffmanTree, Buffer, Name, &now, &size);
+//				printf("%d", j);
+//				printf("%lld %lld", now, size);
+				if (now == size) {
+					printf("解压缩完成。\n");
+					break;
+				}
+			}
+		}
+	} else {
+		printf("Error!\n");
+	}
+	fclose(fp);
+}
+
+int putSource(tree *HuffmanTree, unsigned char *Buffer, char *Name, long long int *now, long long int *size) {
+	int ret = 0;
+	FILE *fp;
+	fp = fopen(Name, "ab");
+	if (fp) {
+		int n = 0;
+		for (n; HuffmanTree[n].left == -1; n++);
+//		for (int i = n; i < 2 * n - 1; i++) {
+//			if (HuffmanTree[i].left == -1) {
+//				printf("error!!!!!\n");
+//			}
+//		}
+		n = 2 * n - 2;
+//		printf("n = %d", n);
+		int spot = n;
+//		char a[9] = {'\0'};
+//		int k = 0;
+//		printf("%s\n", Buffer);
+		for (int i = 0; Buffer[i] != '\0'; i++) {
+			if (Buffer[i] == '1') {
+				spot = HuffmanTree[spot].left;
+			} else if (Buffer[i] == '0') {
+				spot = HuffmanTree[spot].right;
+			}
+//			a[k++] = Buffer[i];
+			ret++;
+//			printf("spot = %d\t", spot);
+			if (HuffmanTree[spot].left == -1) {
+//				printf("bits = %s a = %s\t", HuffmanTree[spot].bits, a);
+//				printf("%d ok\t", HuffmanTree[spot].info);
+				if (*now != *size) {
+					fwrite(&HuffmanTree[spot].info, 1, 1, fp);
+					spot = n;
+					(*now)++;
+					ret = 0;
+				} else {
+					return 0;
+				}
+//				k = 0;
+//				for (int l = 0; l < 9; l++) {
+//					a[l] = '\0';
+//				}
+			}
+		}
+		if (ret != 0) {
+			int i = 0;
+			for (i; Buffer[i + ret] != '\0'; i++) {
+				Buffer[i] = '\0';
+			}
+			for (int j = 0; j < ret; j++) {
+				Buffer[j] = Buffer[i];
+				Buffer[i++] = '\0';
+			}
+		}
+	} else {
+		printf("Error!\n");
+	}
+	fclose(fp);
+	return ret;
+}
